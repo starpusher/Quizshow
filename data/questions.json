@@ -1,1 +1,37 @@
+{
+  "settings": {
+    "negative_scoring": true,
+    "wrong_penalty": "question_points",
+    "allow_steal": true,
+    "max_attempts": 3,
+    "media_base": "media/"
+  },
+  "players": ["Schmobin", "Nooreax", "Gast"],
+  "categories": [
+    {
+      "title": "Zurück in die Schule",
+      "questions": [
+        { "id": "S-200-1", "points": 200, "text": "Wie viele Planeten hat unser Sonnensystem?", "answer": "Acht" },
+        { "id": "S-400-1", "points": 400, "text": "Hauptstadt von Kanada?", "answer": "Ottawa" },
+        { "id": "S-600-1", "points": 600, "text": "Formel für die Fläche eines Kreises?", "answer": "π·r²" }
+      ]
+    },
+    {
+      "title": "Games",
+      "questions": [
+        { "id": "G-200-1", "points": 200, "text": "Studio von 'The Witcher 3'?", "answer": "CD Projekt Red" },
+        { "id": "G-400-1", "points": 400, "text": "Erste PlayStation erschien in welchem Jahr?", "answer": "1994" },
+        { "id": "G-600-1", "points": 600, "text": "Bildfrage: Konsole?", "answer": "PlayStation 1", "image": "ps1.jpg" }
+      ]
+    },
+    {
+      "title": "Filme/Serien",
+      "questions": [
+        { "id": "F-200-1", "points": 200, "text": "Regisseur von 'Inception'?", "answer": "Christopher Nolan" },
+        { "id": "F-400-1", "points": 400, "text": "Hogwarts-Haus von Harry Potter?", "answer": "Gryffindor" },
+        { "id": "F-600-1", "points": 600, "text": "Serienintro mit gelbem Sofa?", "answer": "Die Simpsons" }
+      ]
+    }
+  ]
+}
 
