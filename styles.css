@@ -1,1 +1,28 @@
+:root{--bg:#0b0b12;--panel:#17172a;--accent:#8b5cf6;--text:#f4f5f9;--muted:#9aa0b4;--ok:#3fbf6c;--bad:#ff5c74}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:12px 16px;border-bottom:1px solid #23233d;position:sticky;top:0;background:rgba(11,11,18,.9);backdrop-filter:blur(6px)}
+.controls button{background:var(--panel);border:1px solid #2b2b47;color:var(--text);padding:.5rem .75rem;border-radius:.5rem;cursor:pointer}
+.players{display:flex;gap:.75rem;flex-wrap:wrap}
+.pill{display:flex;align-items:center;gap:.5rem;background:var(--panel);border:1px solid #2b2b47;border-radius:.75rem;padding:.4rem .6rem}
+.pill input{width:10rem;background:transparent;border:1px solid #34344f;border-radius:.4rem;color:var(--text);padding:.25rem .4rem}
+.pill .score{font-weight:800}
+
+.board{max-width:1300px;margin:18px auto;padding:0 16px;display:grid;gap:12px}
+.tile{background:linear-gradient(180deg,#1e1e34,#151528);border:1px solid #2f2f4b;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.25rem;cursor:pointer;min-height:72px;text-align:center}
+.tile.category{background:#211c3a;text-transform:uppercase}
+.tile.used{opacity:.35;pointer-events:none}
+.tile.busy{outline:2px dashed var(--accent)}
+
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.modal{min-width:60vw;max-width:960px}
+.qhead{display:flex;justify-content:space-between;align-items:center}
+.qpts{opacity:.85}
+.qtext{font-size:1.35rem;margin:.6rem 0}
+.qimg,.qvid{max-width:100%;max-height:48vh;border-radius:.5rem;border:1px solid #333;margin:.5rem 0}
+.answer{margin-top:.5rem;padding:.5rem;border:1px dashed #666;border-radius:.4rem;background:#12121f}
+.attempts{display:flex;align-items:center;gap:.5rem;margin-top:.5rem}
+.actions{display:flex;gap:.5rem;margin-top:.75rem}
+.actions .ok{background:var(--ok);border-color:#2a8a50}
+.actions .bad{background:var(--bad);border-color:#cc475c}
 

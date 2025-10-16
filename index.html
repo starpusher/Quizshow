@@ -1,1 +1,65 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Quizshow</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="players" id="playersBar"></div>
+    <div class="controls">
+      <button id="exportBtn">Export</button>
+      <button id="importBtn">Import</button>
+      <input id="importFile" type="file" accept="application/json" hidden />
+      <button id="resetBtn">Reset</button>
+      <button id="loadBtn">Spiel laden</button>
+      <input id="loadFile" type="file" accept="application/json" hidden />
+    </div>
+  </header>
+
+  <main>
+    <section id="board" class="board" aria-live="polite"></section>
+  </main>
+
+  <!-- Frage-Modal -->
+  <dialog id="qModal">
+    <form method="dialog" class="modal">
+      <header class="qhead">
+        <h3 id="qCat"></h3>
+        <span id="qPts" class="qpts"></span>
+      </header>
+
+      <div id="qText" class="qtext"></div>
+      <img id="qImg" class="qimg" alt="" hidden />
+      <audio id="qAud" controls hidden></audio>
+      <video id="qVid" controls class="qvid" hidden></video>
+
+      <div class="answer-wrap">
+        <button id="revealBtn" type="button">Antwort zeigen</button>
+        <div id="answer" class="answer" hidden></div>
+      </div>
+
+      <div class="attempts">
+        <label>Spieler:</label>
+        <select id="playerSelect"></select>
+        <span id="attemptInfo"></span>
+      </div>
+
+      <div class="actions">
+        <button id="correctBtn" type="button" class="ok">Richtig</button>
+        <button id="wrongBtn"   type="button" class="bad">Falsch</button>
+        <button id="skipBtn"    type="button">Überspringen</button>
+      </div>
+
+      <menu>
+        <button id="closeBtn" value="close">Schließen</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
 
