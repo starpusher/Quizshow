@@ -1,13 +1,48 @@
-/* ======= Lade Daten & State ======= */
-let data = null;
-const state = {
-  players: [],
-  scores: {},                 // key -> number
-  q: {},                      // questionId -> {status, attempts: [{playerId,result}], winner}
-  used: new Set(),            // redundant zu q.status === resolved (für schnelles Rendern)
-  settings: {}
+/* ======= Rollen & Broadcast ======= */
+const params = new URLSearchParams(location.search);
+const role = params.get('view') || 'host';  // 'host' | 'screen'
+if (role === 'screen') document.body.classList.add('audience');
+
+const chan = new BroadcastChannel('quiz-show');
+function send(type, payload={}) { if (role === 'host') chan.postMessage({ type, payload }); }
+chan.onmessage = ({ data }) => handleMsg(data);
+
+function handleMsg(msg) {
+  const { type, payload } = msg || {};
+  if (role !== 'screen') return;
+  switch (type) {
+    case 'SHOW_Q':
+      showForAudience(payload);
+      break;
+    case 'REVEAL_ANSWER':
+      els.answer.hidden = false;
+      break;
+    case 'RESOLVE_Q':
+      state.q[payload.id] = { status: 'resolved', attempts: [] };
+      state.used.add(payload.id);
+      renderBoard();
+      if (els.modal.open) els.modal.close();
+      break;
+    case 'SYNC_STATE':
+      // kompletter Stand vom Host
+      data = payload.data;
+      state.players = payload.state.players;
+      state.scores = payload.state.scores;
+      state.q = payload.state.q || {};
+      state.used = new Set(payload.state.used || []);
+      state.settings = payload.state.settings || {};
+      renderPlayersBar(true);  // Publikum: nur lesen
+      renderBoard();
+      break;
+  }
+}
+// Publikum bittet beim Start um Sync
+if (role === 'screen') chan.postMessage({ type: 'SCREEN_READY' });
+else chan.onmessage = ({ data }) => {
+  if (data?.type === 'SCREEN_READY') sendSync();
 };
 
+/* ======= DOM-Refs ======= */
 const els = {
   board: document.getElementById('board'),
   playersBar: document.getElementById('playersBar'),
@@ -31,9 +66,19 @@ const els = {
   importBtn: document.getElementById('importBtn'),
   importFile: document.getElementById('importFile'),
   loadBtn: document.getElementById('loadBtn'),
-  loadFile: document.getElementById('loadFile')
+  loadFile: document.getElementById('loadFile'),
+  presentBtn: document.getElementById('presentBtn')
 };
 
+/* ======= Daten & State ======= */
+let data = null;
+const state = {
+  players: [],
+  scores: {},
+  q: {},
+  used: new Set(),
+  settings: {}
+};
 let current = { col: -1, row: -1, q: null, id: null };
 
 /* ======= Init ======= */
@@ -41,10 +86,10 @@ init();
 async function init() {
   await loadContent('data/questions.json');
   loadState();
-  renderPlayersBar();
+  renderPlayersBar(role === 'screen');
   renderBoard();
-
   attachGlobalHandlers();
+  if (role === 'host') sendSync();
 }
 
 async function loadContent(urlOrFileText) {
@@ -56,16 +101,13 @@ async function loadContent(urlOrFileText) {
   } else {
     data = urlOrFileText;
   }
-
   state.settings = data.settings || {};
-  // Players
   state.players = (data.players || ['Spieler 1','Spieler 2']).map((name, i) => ({ id: `p${i+1}`, name }));
-  // Scores init
   for (const p of state.players) if (!(p.id in state.scores)) state.scores[p.id] = 0;
 }
 
 /* ======= Render ======= */
-function renderPlayersBar() {
+function renderPlayersBar(readOnly=false) {
   els.playersBar.innerHTML = '';
   for (const p of state.players) {
     const wrap = document.createElement('div');
@@ -73,7 +115,8 @@ function renderPlayersBar() {
 
     const inp = document.createElement('input');
     inp.value = p.name;
-    inp.addEventListener('change', () => { p.name = inp.value; saveState(); });
+    inp.disabled = readOnly || role === 'screen';
+    inp.addEventListener('change', () => { p.name = inp.value; saveState(); sendSync(); });
 
     const score = document.createElement('span');
     score.className = 'score';
@@ -82,7 +125,6 @@ function renderPlayersBar() {
     wrap.append(inp, score);
     els.playersBar.appendChild(wrap);
 
-    // Keep a reference for updates
     p._scoreEl = score;
   }
 }
@@ -91,7 +133,6 @@ function renderBoard() {
   const cats = data.categories;
   const cols = cats.length;
   const maxRows = Math.max(...cats.map(c => c.questions.length));
-
   els.board.style.gridTemplateColumns = `repeat(${cols}, minmax(140px,1fr))`;
   els.board.innerHTML = '';
 
@@ -117,13 +158,13 @@ function renderBoard() {
       const id = q.id || `${c}-${r}`;
       if (state.used.has(id) || (state.q[id]?.status === 'resolved')) tile.classList.add('used');
 
-      tile.addEventListener('click', () => openQuestion(c, r));
+      if (role === 'host') tile.addEventListener('click', () => openQuestion(c, r)); // Publikum klickt nicht
       els.board.appendChild(tile);
     }
   }
 }
 
-/* ======= Modal / Flow ======= */
+/* ======= Modal / Host-Flow ======= */
 function openQuestion(col, row) {
   const cat = data.categories[col];
   const q = cat.questions[row];
@@ -132,114 +173,118 @@ function openQuestion(col, row) {
 
   markBusyTile(true);
 
-  // Set content
+  // Inhalt
   els.qCat.textContent = cat.title;
   els.qPts.textContent = `${q.points} Punkte`;
   els.qText.textContent = q.text || '';
   els.answer.textContent = q.answer || '—';
   els.answer.hidden = true;
+  setMedia(q);
 
-  // Media
-  const base = (data.settings && data.settings.media_base) || '';
-  // reset media elements
-  els.qImg.hidden = true; els.qAud.hidden = true; els.qVid.hidden = true;
-  if (q.image) { els.qImg.src = base + q.image; els.qImg.hidden = false; }
-  if (q.audio) { els.qAud.src = base + q.audio; els.qAud.hidden = false; }
-  if (q.video) { els.qVid.src = base + q.video; els.qVid.hidden = false; }
-
-  // State for this question
+  // State
   const qst = state.q[id] ||= { status: 'open', attempts: [] };
-  if (qst.status === 'resolved') { // falls per Reload
-    els.modal.close();
-    return;
-  } else {
-    qst.status = qst.status === 'unused' ? 'open' : 'open';
-  }
-
-  // Player select: exclude already attempted
+  if (qst.status === 'resolved') { els.modal.close(); return; }
   populatePlayerSelect(id);
-
   updateAttemptInfo(id);
 
-  els.revealBtn.onclick = () => (els.answer.hidden = false);
+  // Buttons
+  els.revealBtn.onclick = () => { els.answer.hidden = false; send('REVEAL_ANSWER'); };
   els.correctBtn.onclick = () => onResult('correct');
   els.wrongBtn.onclick   = () => onResult('wrong');
   els.skipBtn.onclick    = () => resolveQuestion(null);
 
   els.modal.addEventListener('close', onModalCloseOnce, { once: true });
   els.modal.showModal();
+
+  // Publikum anzeigen lassen
+  send('SHOW_Q', { col, row, id, q: {
+    cat: cat.title, points: q.points, text: q.text, answer: q.answer,
+    image: q.image, audio: q.audio, video: q.video
+  }});
 }
 
-function onModalCloseOnce() {
-  markBusyTile(false);
-}
+function onModalCloseOnce(){ markBusyTile(false); }
 
 function populatePlayerSelect(qid) {
   const tried = new Set((state.q[qid]?.attempts || []).map(a => a.playerId));
   els.playerSelect.innerHTML = '';
   for (const p of state.players) {
-    if (tried.has(p.id)) continue; // darf nicht zweimal
+    if (tried.has(p.id)) continue;
     const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.name;
+    opt.value = p.id; opt.textContent = p.name;
     els.playerSelect.appendChild(opt);
   }
-  // Falls alle schon dran waren → leer; Host kann nur noch „Überspringen“
 }
 
 function updateAttemptInfo(qid) {
-  const s = state.settings;
   const attempts = state.q[qid]?.attempts?.length || 0;
-  const max = s.max_attempts ?? 99;
+  const max = state.settings.max_attempts ?? 99;
   const triedNames = (state.q[qid]?.attempts || []).map(a => idToName(a.playerId));
   els.attemptInfo.textContent = `Versuch ${attempts + 1}/${max}${triedNames.length ? " – schon probiert: " + triedNames.join(", ") : ""}`;
 }
 
 function onResult(result) {
   const pid = els.playerSelect.value;
-  if (!pid) return; // keiner mehr übrig
+  if (!pid) return;
   const qid = current.id;
   const q = current.q;
 
-  // Log attempt
-  const entry = { playerId: pid, result };
-  state.q[qid].attempts.push(entry);
+  state.q[qid].attempts.push({ playerId: pid, result });
 
   if (result === 'correct') {
-    // Punkte + und resolve
     addPoints(pid, q.points);
     state.q[qid].winner = pid;
     resolveQuestion(pid);
   } else {
-    // Falsch → ggf. Minus
-    const s = state.settings;
-    if (s.negative_scoring) {
-      const pen = s.wrong_penalty === 'question_points' ? q.points : Number(s.wrong_penalty || 0);
+    if (state.settings.negative_scoring) {
+      const pen = state.settings.wrong_penalty === 'question_points' ? q.points : Number(state.settings.wrong_penalty || 0);
       addPoints(pid, -pen);
     }
-    // Steal/weitere Versuche?
     const max = state.settings.max_attempts ?? 99;
     const attempts = state.q[qid].attempts.length;
     const othersLeft = state.players.some(p => !state.q[qid].attempts.find(a => a.playerId === p.id));
     if ((state.settings.allow_steal && othersLeft) && attempts < max) {
-      // bleiben in "open" / Steal-Phase – Auswahl neu füllen
       populatePlayerSelect(qid);
       updateAttemptInfo(qid);
-      saveState();
+      saveState(); sendSync();
       return;
     } else {
-      resolveQuestion(null); // keiner richtig
+      resolveQuestion(null);
     }
   }
 }
 
-function resolveQuestion(winnerId) {
+function resolveQuestion() {
   const qid = current.id;
   state.q[qid].status = 'resolved';
   state.used.add(qid);
-  saveState();
+  saveState(); sendSync();
   renderBoard();
   els.modal.close();
+  send('RESOLVE_Q', { id: qid });
+}
+
+/* ======= Publikum-Ansicht ======= */
+function showForAudience(payload){
+  const { id, q } = payload;
+  current = { id, q };
+  els.qCat.textContent = q.cat;
+  els.qPts.textContent = `${q.points} Punkte`;
+  els.qText.textContent = q.text || '';
+  els.answer.textContent = q.answer || '—';
+  els.answer.hidden = true;
+  setMedia(q);
+  els.modal.showModal();
+}
+
+/* ======= Gemeinsames ======= */
+function setMedia(q){
+  const base = (data.settings && data.settings.media_base) || '';
+  // Reset
+  els.qImg.hidden = els.qAud.hidden = els.qVid.hidden = true;
+  if (q.image){ els.qImg.src = base + q.image; els.qImg.hidden = false; }
+  if (q.audio){ els.qAud.src = base + q.audio; els.qAud.hidden = false; }
+  if (q.video){ els.qVid.src = base + q.video; els.qVid.hidden = false; }
 }
 
 function addPoints(pid, delta) {
@@ -248,11 +293,10 @@ function addPoints(pid, delta) {
   if (p && p._scoreEl) p._scoreEl.textContent = state.scores[pid];
 }
 
-/* Busy outline on tile while modal open */
 function markBusyTile(isBusy) {
   const { col, row } = current;
   if (col < 0) return;
-  const idx = data.categories.length + (row * data.categories.length) + col; // offset by header row
+  const idx = data.categories.length + (row * data.categories.length) + col;
   const tile = els.board.children[idx];
   if (!tile) return;
   tile.classList.toggle('busy', isBusy);
@@ -269,13 +313,11 @@ function saveState() {
   };
   localStorage.setItem('quiz_state', JSON.stringify(payload));
 }
-
 function loadState() {
   const raw = localStorage.getItem('quiz_state');
   if (!raw) return;
   try {
     const s = JSON.parse(raw);
-    // Namen übernehmen falls gleich viele Spieler
     if (s.players && s.players.length === (data.players || []).length) {
       state.players = s.players;
     }
@@ -285,19 +327,28 @@ function loadState() {
   } catch {}
 }
 
-/* ======= Helpers & Global Buttons ======= */
+/* ======= Helper & Global ======= */
 function idToName(pid){ return state.players.find(p => p.id === pid)?.name || pid; }
+function sendSync(){
+  send('SYNC_STATE', { state: {
+    players: state.players, scores: state.scores, q: state.q,
+    used: Array.from(state.used), settings: state.settings
+  }, data });
+}
 
 function attachGlobalHandlers() {
-  // Reset
+  if (els.presentBtn && role === 'host') {
+    els.presentBtn.onclick = () => window.open(`${location.pathname}?view=screen`, 'quiz-screen', 'width=1280,height=800');
+  }
+
   els.resetBtn.onclick = () => {
+    if (role !== 'host') return;
     if (!confirm('Spielstand wirklich löschen?')) return;
     for (const p of state.players) state.scores[p.id] = 0;
     state.q = {}; state.used = new Set();
-    saveState(); renderPlayersBar(); renderBoard();
+    saveState(); renderPlayersBar(); renderBoard(); sendSync();
   };
 
-  // Export
   els.exportBtn.onclick = () => {
     const blob = new Blob([localStorage.getItem('quiz_state') || '{}'], { type: 'application/json' });
     const a = document.createElement('a');
@@ -306,36 +357,31 @@ function attachGlobalHandlers() {
     a.click();
   };
 
-  // Import
   els.importBtn.onclick = () => els.importFile.click();
   els.importFile.onchange = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const text = await f.text();
     localStorage.setItem('quiz_state', text);
-    loadState(); renderPlayersBar(); renderBoard();
+    loadState(); renderPlayersBar(); renderBoard(); sendSync();
   };
 
-  // Neues Spiel (andere Fragen)
   els.loadBtn.onclick = () => els.loadFile.click();
   els.loadFile.onchange = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const text = await f.text();
     await loadContent(text);
-    // Reset Spielstand für neue Fragen
     state.q = {}; state.used = new Set();
     for (const p of state.players) state.scores[p.id] = 0;
-    saveState();
-    renderPlayersBar(); renderBoard();
+    saveState(); renderPlayersBar(); renderBoard(); sendSync();
   };
 
-  // Shortcuts im Modal
+  // Shortcuts nur für Host & nur im Modal
   window.addEventListener('keydown', (ev) => {
-    if (!els.modal.open) return;
-    if (ev.key === 'a') els.answer.hidden = false;
+    if (role !== 'host' || !els.modal.open) return;
+    if (ev.key === 'a') els.answer.hidden = false, send('REVEAL_ANSWER');
     if (ev.key.toLowerCase() === 'r') els.correctBtn.click();
     if (ev.key.toLowerCase() === 'f') els.wrongBtn.click();
     if (ev.key.toLowerCase() === 's') els.skipBtn.click();
-    // 1..8 für Spieler
     if (/^[1-8]$/.test(ev.key)) {
       const idx = Number(ev.key) - 1;
       const opt = els.playerSelect.options[idx];
